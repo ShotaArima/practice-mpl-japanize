@@ -6,6 +6,8 @@ See `docs/matplotlib-japanese-font-stack.md` for the stack-level explanation of 
 
 See `docs/japanize-matplotlib-behavior.md` for how `import japanize_matplotlib` differs from project-local fonts and `matplotlibrc`.
 
+See `docs/when-japanese-font-settings-break.md` for common cases where Japanese font settings are lost and when to rerun `japanize_matplotlib.japanize()`.
+
 ## Setup
 
 ```bash
