@@ -75,7 +75,8 @@ def main() -> int:
         matplotlibrc,
         textwrap.dedent(
             """\
-            font.family: Noto Sans JP
+            font.family: sans-serif
+            font.sans-serif: Noto Sans JP, DejaVu Sans
             axes.unicode_minus: False
             """
         ),

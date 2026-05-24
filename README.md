@@ -23,7 +23,8 @@ Open `notebooks/02_japanese_font_via_matplotlibrc.ipynb` from PyCharm or Jupyter
 The notebook downloads Noto Sans JP from the Google Fonts repository into the current directory's `.fonts` directory, generates a local `.fontconfig/fonts.conf`, and writes `matplotlibrc` with:
 
 ```txt
-font.family: Noto Sans JP
+font.family: sans-serif
+font.sans-serif: Noto Sans JP, DejaVu Sans
 axes.unicode_minus: False
 ```
 
@@ -41,3 +42,8 @@ For PyCharm/Jupyter, make sure the kernel starts with this environment variable 
 ```bash
 FONTCONFIG_FILE=/path/to/practice-mpl-japanize/notebooks/.fontconfig/fonts.conf
 ```
+
+If `fc-cache` and `fc-match` are not found, the environment does not have the fontconfig command line tools installed. In that case this experiment should show two separate facts:
+
+- `matplotlibrc` can request `Noto Sans JP`.
+- Matplotlib still cannot discover `notebooks/.fonts/NotoSansJP[wght].ttf` unless fontconfig can expose it, the font is installed into a standard font directory, or the font is registered from Python with `font_manager.addfont()`.
