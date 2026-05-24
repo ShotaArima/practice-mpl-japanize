@@ -2,6 +2,8 @@
 
 Matplotlib font rendering experiments with uv and Jupyter.
 
+See `docs/matplotlib-japanese-font-stack.md` for the stack-level explanation of how Linux, uv, Jupyter kernels, and Matplotlib combine to render Japanese text.
+
 ## Setup
 
 ```bash
