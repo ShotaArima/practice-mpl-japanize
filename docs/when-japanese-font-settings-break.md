@@ -76,6 +76,8 @@ IPAexGothic in ttflist: 1 以上
 findfont: .../japanize_matplotlib/fonts/ipaexg.ttf
 ```
 
+`japanize_matplotlib.japanize()` を同じ kernel 内で複数回呼ぶと、`IPAexGothic in ttflist` が `2`、`3` のように増えることがあります。これは `addfont()` が再実行されるためです。重要なのは件数そのものではなく、`font.family` が `['IPAexGothic']` に戻り、`findfont` が `ipaexg.ttf` を指していることです。
+
 ## よくあるケースと必要な再実行
 
 | ケース | 何が消えるか | 何を実行するか |
