@@ -562,3 +562,5 @@ rcParams を設定する。
 ```
 
 前者は理想的な利用体験を作ります。後者は制御された実験として最も分かりやすい方法です。この 2 つの差分にこそ、Linux、uv、Jupyter、Matplotlib の境界があります。
+
+`import japanize_matplotlib` がこの境界をどのように迂回しているかは、[`japanize-matplotlib-behavior.md`](japanize-matplotlib-behavior.md) を参照してください。
