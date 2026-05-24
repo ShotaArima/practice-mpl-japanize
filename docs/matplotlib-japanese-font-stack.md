@@ -1,8 +1,8 @@
-# Linux, uv, Jupyter, and Matplotlib Font Rendering
+# Linux、uv、Jupyter、Matplotlib による日本語フォント描画の仕組み
 
-## Goal
+## 目標
 
-The ideal environment is one where a fresh notebook can run ordinary Matplotlib code and render Japanese text without per-notebook setup:
+理想は、新しい Notebook で特別な設定コードを書かなくても、普通の Matplotlib コードだけで日本語が描画できる環境です。
 
 ```python
 import matplotlib.pyplot as plt
@@ -14,23 +14,23 @@ plt.ylabel("値")
 plt.show()
 ```
 
-This looks like a Matplotlib problem, but it is really a boundary problem across four layers:
+一見すると Matplotlib だけの問題に見えます。しかし実際には、次の 4 つの層をまたぐ境界問題です。
 
 ```text
 Linux OS / fontconfig
   ↓
-uv-created Python virtual environment
+uv が作成した Python 仮想環境
   ↓
-Jupyter / IPython kernel process
+Jupyter / IPython kernel プロセス
   ↓
-Matplotlib font manager and backend
+Matplotlib の font manager と backend
 ```
 
-Japanese text renders only when the kernel process can see a Japanese-capable font and Matplotlib can resolve the configured font family to that font file.
+日本語テキストが描画されるためには、kernel プロセスから日本語グリフを持つフォントが見えていて、さらに Matplotlib が指定されたフォントファミリー名を実際のフォントファイルへ解決できる必要があります。
 
-## Observed Environment
+## 観測した環境
 
-The PyCharm notebook kernel reported:
+PyCharm の Notebook kernel では、次のような情報が得られました。
 
 ```text
 Python executable:
@@ -55,21 +55,21 @@ Matplotlib cache dir:
 /home/ubuntu-server/.cache/matplotlib
 ```
 
-This tells us several important things:
+ここから、いくつか重要なことが分かります。
 
-- The notebook is not using the system Python. It is using the project `.venv`.
-- The base interpreter was installed by `uv`.
-- The notebook backend is the inline Jupyter backend, not a GUI backend.
-- Matplotlib configuration and font cache live outside the `.venv`, under the user's home directory.
-- The current notebook process is a long-lived kernel. Changes made after Matplotlib is imported may not affect that already-running process.
+- Notebook は system Python ではなく、プロジェクトの `.venv` を使っている。
+- base interpreter は `uv` によってインストールされた Python である。
+- Notebook の backend は GUI backend ではなく、Jupyter の inline backend である。
+- Matplotlib の設定ディレクトリとフォントキャッシュは `.venv` の中ではなく、ユーザーの home directory 配下にある。
+- Notebook のコードは、長く生き続ける kernel プロセスの中で実行される。Matplotlib import 後に加えた変更は、すでに動いている kernel には反映されないことがある。
 
-## The Rendering Pipeline
+## 描画までの流れ
 
-### 1. Linux Provides Fonts
+### 1. Linux がフォントを提供する
 
-On Linux, fonts are usually exposed through standard directories and fontconfig.
+Linux では通常、フォントは標準ディレクトリと fontconfig を通じて提供されます。
 
-Common font locations include:
+代表的なフォント配置場所は次の通りです。
 
 ```text
 /usr/share/fonts
@@ -78,7 +78,7 @@ Common font locations include:
 ~/.fonts
 ```
 
-fontconfig tools such as `fc-cache`, `fc-list`, and `fc-match` are commonly used to build and inspect the OS-level font database:
+fontconfig では、`fc-cache`、`fc-list`、`fc-match` などのコマンドを使って、OS 側のフォントデータベースを更新・確認できます。
 
 ```bash
 fc-cache -fv
@@ -86,24 +86,26 @@ fc-match "Noto Sans JP"
 fc-list | grep -i noto
 ```
 
-If these commands do not exist, the environment may still contain font files, but it is missing the normal command-line inspection and cache tools. In the observed environment:
+これらのコマンドが存在しない場合でも、フォントファイル自体は存在しているかもしれません。しかし、OS/fontconfig 経由でそのフォントが見えているかを通常の方法で確認したり、キャッシュを更新したりできない状態です。
+
+今回観測した環境では、次のような状態でした。
 
 ```text
 fc-cache was not found
 fc-match was not found
 ```
 
-That does not prove Matplotlib cannot render Japanese. It means the OS/fontconfig path cannot be verified or refreshed in the usual way.
+これは「Matplotlib が絶対に日本語を描画できない」という意味ではありません。通常の OS/fontconfig 経由の検証やキャッシュ更新ができない、という意味です。
 
-### 2. uv Provides Python, Not Fonts
+### 2. uv は Python を提供するが、フォントは提供しない
 
-`uv` creates and manages the Python interpreter and virtual environment:
+`uv` は Python interpreter と仮想環境を作成・管理します。
 
 ```text
 project/.venv/bin/python
 ```
 
-It installs Python packages such as:
+そして、次のような Python package をインストールします。
 
 ```text
 matplotlib
@@ -112,36 +114,36 @@ jupyter
 ipykernel
 ```
 
-But `uv` does not install OS fonts, refresh fontconfig caches, or automatically make a downloaded `.ttf` visible to Matplotlib.
+しかし、`uv` は OS フォントをインストールしません。fontconfig のキャッシュも更新しません。ダウンロードした `.ttf` ファイルを Matplotlib から自動的に見えるようにすることもありません。
 
-This distinction is central:
+ここが重要です。
 
 ```text
-uv manages Python packages.
-Linux/fontconfig manages system fonts.
-Matplotlib bridges from Python into font discovery.
+uv は Python package を管理する。
+Linux/fontconfig は system font を管理する。
+Matplotlib は Python からフォント探索へ橋をかける。
 ```
 
-Installing `matplotlib` with `uv` gives you the plotting library. It does not guarantee that the runtime environment has Japanese fonts.
+`uv` で `matplotlib` をインストールすると、描画ライブラリは使えるようになります。しかし、その実行環境に日本語フォントが存在し、Matplotlib から発見できるとは限りません。
 
-### 3. Jupyter Runs a Kernel Process
+### 3. Jupyter は kernel プロセスを実行する
 
-When a notebook is opened in PyCharm, the code runs inside a Jupyter/IPython kernel process. The important value is:
+PyCharm で Notebook を開くと、セルのコードは Jupyter/IPython kernel プロセスの中で実行されます。まず確認すべき値はこれです。
 
 ```python
 import sys
 print(sys.executable)
 ```
 
-For this project, the desired result is:
+このプロジェクトで期待する値は次のようなものです。
 
 ```text
 /home/ubuntu-server/PycharmProjects/practice-mpl-japanize/.venv/bin/python
 ```
 
-That confirms that the notebook is using the `uv` project environment.
+これにより、Notebook が `uv` プロジェクトの仮想環境を使っていることを確認できます。
 
-The kernel also owns process environment variables:
+kernel プロセスは環境変数も保持しています。
 
 ```python
 import os
@@ -149,44 +151,44 @@ print(os.environ.get("FONTCONFIG_FILE"))
 print(os.environ.get("MPLCONFIGDIR"))
 ```
 
-If these are set inside a notebook cell after Matplotlib has already been imported, it may be too late. Matplotlib reads configuration and initializes font state early.
+これらの環境変数を Notebook セル内で設定したとしても、すでに Matplotlib が import 済みなら遅い場合があります。Matplotlib は設定やフォント状態を比較的早い段階で読み込みます。
 
-That is why kernel restarts matter:
+そのため、kernel の再起動が重要になります。
 
 ```text
-create font files
-set environment variables
-start or restart kernel
-import matplotlib
-draw plot
+フォントファイルを作成する
+環境変数を設定する
+kernel を起動または再起動する
+matplotlib を import する
+グラフを描画する
 ```
 
-### 4. Matplotlib Reads Configuration
+### 4. Matplotlib が設定を読む
 
-Matplotlib looks for configuration in a known order. In a notebook running from `notebooks/`, a local file can be picked up:
+Matplotlib は決められた順序で設定ファイルを探します。Notebook を `notebooks/` から実行している場合、ローカルの設定ファイルが読み込まれることがあります。
 
 ```text
 notebooks/matplotlibrc
 ```
 
-You can check which file was loaded:
+どの設定ファイルが読み込まれたかは、次のコードで確認できます。
 
 ```python
 import matplotlib
 print(matplotlib.matplotlib_fname())
 ```
 
-In the observed run:
+今回の実行では、次のように表示されました。
 
 ```text
 matplotlibrc loaded from: matplotlibrc
 ```
 
-That means Matplotlib found a local `matplotlibrc`.
+これは、Matplotlib がローカルの `matplotlibrc` を見つけたことを意味します。
 
-However, reading `matplotlibrc` is not the same as discovering a font file.
+ただし、`matplotlibrc` が読まれることと、フォントファイルが発見されることは別問題です。
 
-This configuration:
+次の設定は、
 
 ```text
 font.family: sans-serif
@@ -194,29 +196,29 @@ font.sans-serif: Noto Sans JP, DejaVu Sans
 axes.unicode_minus: False
 ```
 
-tells Matplotlib:
+Matplotlib に対して、次のように指示しています。
 
 ```text
-Prefer Noto Sans JP when resolving sans-serif text.
-Fall back to DejaVu Sans if needed.
+sans-serif の文字を描画するときは、Noto Sans JP を優先する。
+必要なら DejaVu Sans に fallback する。
 ```
 
-It does not tell Matplotlib:
+しかし、次のような意味ではありません。
 
 ```text
-Also scan ./notebooks/.fonts/NotoSansJP[wght].ttf.
+./notebooks/.fonts/NotoSansJP[wght].ttf も追加で scan する。
 ```
 
-Matplotlib official examples use `font.family` plus family-specific lists such as `font.sans-serif` to select among fonts that are already discoverable by Matplotlib. The Matplotlib font manager API also documents that fonts manually added with `font_manager.addfont()` do not persist in the cache and must be added whenever Matplotlib is imported.
+Matplotlib 公式の例でも、`font.family` と `font.sans-serif` のような family-specific list は、すでに Matplotlib から発見可能なフォントの中から選ぶために使われています。また Matplotlib の font manager API では、`font_manager.addfont()` で手動追加したフォントはキャッシュに永続化されず、Matplotlib を import するたびに追加する必要があると説明されています。
 
-Sources:
+参考:
 
 - [Matplotlib: Configure the font family](https://matplotlib.org/stable/gallery/text_labels_and_annotations/font_family_rc.html)
 - [Matplotlib: font_manager API](https://matplotlib.org/stable/api/font_manager_api.html?highlight=fontproperties)
 
-## Why `.fonts` plus `matplotlibrc` Did Not Work
+## なぜ `.fonts` と `matplotlibrc` だけでは動かなかったのか
 
-The project created:
+プロジェクトでは、次のファイルを作成しました。
 
 ```text
 notebooks/.fonts/NotoSansJP[wght].ttf
@@ -224,49 +226,49 @@ notebooks/.fontconfig/fonts.conf
 notebooks/matplotlibrc
 ```
 
-The downloaded font existed:
+ダウンロードしたフォントファイルは存在していました。
 
 ```text
 /home/ubuntu-server/PycharmProjects/practice-mpl-japanize/notebooks/.fonts/NotoSansJP[wght].ttf 9589900
 ```
 
-But Matplotlib reported:
+しかし Matplotlib は次のように報告しました。
 
 ```text
 font.family: ['sans-serif']
 cache dir: /home/ubuntu-server/.cache/matplotlib
 ```
 
-And no `Noto Sans JP` font appeared in `matplotlib.font_manager.fontManager.ttflist`.
+さらに、`matplotlib.font_manager.fontManager.ttflist` に `Noto Sans JP` は現れませんでした。
 
-That points to this failure chain:
-
-```text
-The font file exists.
-  ↓
-fontconfig CLI tools are unavailable.
-  ↓
-The local .fontconfig/fonts.conf path is not enough by itself.
-  ↓
-Matplotlib's font manager does not discover the local .ttf.
-  ↓
-matplotlibrc requests Noto Sans JP, but no matching font is registered.
-  ↓
-Matplotlib falls back to a default font such as DejaVu Sans.
-  ↓
-Japanese glyphs are missing or rendered incorrectly.
-```
-
-This is the key lesson:
+これは、次のような失敗の流れを示しています。
 
 ```text
-matplotlibrc selects a font by name.
-It does not install or register an arbitrary local font file.
+フォントファイルは存在する。
+  ↓
+fontconfig CLI tools が存在しない。
+  ↓
+local .fontconfig/fonts.conf だけでは十分ではない。
+  ↓
+Matplotlib の font manager が local .ttf を発見できない。
+  ↓
+matplotlibrc は Noto Sans JP を要求するが、一致するフォントが登録されていない。
+  ↓
+Matplotlib は DejaVu Sans などの default font に fallback する。
+  ↓
+日本語グリフが存在せず、文字化けや豆腐になる。
 ```
 
-## The Positive Control: `addfont()`
+ここでの重要な学びはこれです。
 
-To prove that the font file itself is valid, register it directly in Python:
+```text
+matplotlibrc はフォント名を選択する。
+任意の local font file をインストール・登録するわけではない。
+```
+
+## Positive Control としての `addfont()`
+
+フォントファイル自体が正しいかどうかを確認するには、Python から直接登録します。
 
 ```python
 from pathlib import Path
@@ -286,7 +288,7 @@ print("font name:", font_name)
 print("font file:", fm.findfont(font_name, fallback_to_default=False))
 ```
 
-Then draw:
+その後、描画します。
 
 ```python
 fig, ax = plt.subplots()
@@ -297,27 +299,27 @@ ax.set_ylabel("値")
 plt.show()
 ```
 
-If this works, it proves:
+これで動く場合、次のことが分かります。
 
 ```text
-The Noto Sans JP font file is valid.
-Matplotlib can render Japanese in this kernel.
-The failing part is automatic font discovery, not drawing itself.
+Noto Sans JP のフォントファイルは正しい。
+この kernel の Matplotlib は日本語を描画できる。
+失敗しているのは描画そのものではなく、自動的なフォント発見である。
 ```
 
-But this is not the ideal environment. It requires per-kernel Python setup.
+ただし、これは理想の環境ではありません。kernel ごとに Python 側のセットアップが必要だからです。
 
-## The Ideal Environment
+## 理想の環境
 
-For a fresh notebook to render Japanese without extra code, the font must be discoverable before Matplotlib starts.
+新しい Notebook で追加コードなしに日本語を描画するには、Matplotlib が起動する前にフォントが発見可能になっている必要があります。
 
-There are three practical paths.
+実用的な道筋は 3 つあります。
 
-## Path A: Install Fonts at the OS Level
+## Path A: OS レベルにフォントをインストールする
 
-This is the cleanest path for "nothing special in notebooks".
+「Notebook で何もしなくてもよい」環境にするなら、これが最も素直な方法です。
 
-On Ubuntu-like systems:
+Ubuntu 系の環境では、例えば次のようにします。
 
 ```bash
 sudo apt update
@@ -326,7 +328,7 @@ fc-cache -fv
 fc-match "Noto Sans CJK JP"
 ```
 
-Then configure Matplotlib globally or per project:
+その上で、Matplotlib の設定を global または project ごとに指定します。
 
 ```text
 font.family: sans-serif
@@ -334,23 +336,23 @@ font.sans-serif: Noto Sans CJK JP, Noto Sans JP, DejaVu Sans
 axes.unicode_minus: False
 ```
 
-Result:
+結果として、次の流れで日本語が描画されるようになります。
 
 ```text
-New notebook
+新しい Notebook
   ↓
 import matplotlib.pyplot as plt
   ↓
-Japanese renders
+日本語が描画される
 ```
 
-This approach makes the OS responsible for fonts, which matches how Linux desktop and server environments usually work.
+この方法では、フォント管理を OS に任せます。Linux desktop や server 環境としては自然な構成です。
 
-## Path B: Use Project-Local Fonts plus fontconfig
+## Path B: project-local font と fontconfig を使う
 
-This keeps fonts inside the project, but still depends on fontconfig being available.
+フォントを project 内に閉じ込めたい場合の方法です。ただし、fontconfig が利用できることに依存します。
 
-Project layout:
+想定する project layout は次のようになります。
 
 ```text
 notebooks/
@@ -361,7 +363,7 @@ notebooks/
   matplotlibrc
 ```
 
-Example `fonts.conf`:
+`fonts.conf` の例です。
 
 ```xml
 <?xml version="1.0"?>
@@ -371,88 +373,88 @@ Example `fonts.conf`:
 </fontconfig>
 ```
 
-The kernel process must start with:
+kernel プロセスは次の環境変数付きで起動される必要があります。
 
 ```bash
 FONTCONFIG_FILE=/absolute/path/to/notebooks/.fontconfig/fonts.conf
 ```
 
-Then Matplotlib can potentially discover the project-local font before import.
+その上で Matplotlib が import されると、project-local なフォントを発見できる可能性があります。
 
-This path is educational because it shows how environment variables, kernel startup, fontconfig, and Matplotlib interact. It is also fragile in IDEs unless the IDE lets you reliably set kernel environment variables.
+この方法は教育的です。環境変数、kernel 起動、fontconfig、Matplotlib がどのように関係するかを観察できるからです。一方で、IDE が kernel の環境変数を確実に設定できない場合は壊れやすい方法でもあります。
 
-## Path C: Register Fonts in Python
+## Path C: Python からフォントを登録する
 
-This is the most portable path:
+最も portable な方法です。
 
 ```python
 fm.fontManager.addfont(font_path)
 ```
 
-It works even when fontconfig is missing.
+この方法は fontconfig がなくても動きます。
 
-But it is not "zero setup" because every fresh kernel must run the registration before plotting. It is best understood as the mechanism used by libraries or project bootstrap code.
+ただし、「何もしなくても動く」環境ではありません。fresh kernel ごとに、描画前にフォント登録コードを実行する必要があります。ライブラリや project bootstrap code が内部で実行する処理として理解するとよいです。
 
-## Where Caches Fit
+## Cache はどこに関係するのか
 
-Matplotlib has its own cache:
+Matplotlib は独自の cache を持っています。
 
 ```python
 import matplotlib
 print(matplotlib.get_cachedir())
 ```
 
-In the observed environment:
+今回の環境では次の場所でした。
 
 ```text
 /home/ubuntu-server/.cache/matplotlib
 ```
 
-This cache is outside the `.venv`.
+この cache は `.venv` の外にあります。
 
-That means:
+つまり、次のようなことが起きます。
 
-- Recreating `.venv` does not necessarily clear Matplotlib's font cache.
-- Adding fonts may not affect a running kernel.
-- Deleting the cache can be useful during experiments:
+- `.venv` を作り直しても、Matplotlib の font cache は消えない。
+- フォントを追加しても、実行中の kernel には反映されないことがある。
+- 実験中は cache 削除が有効な場合がある。
 
 ```bash
 rm -rf ~/.cache/matplotlib
 ```
 
-But cache deletion is not a substitute for installing or registering the font. It only forces Matplotlib to rebuild what it can discover.
+ただし、cache 削除はフォントのインストールや登録の代わりにはなりません。Matplotlib が発見できるものを再探索させるだけです。
 
-## Backend Is Usually Not the First Problem
+## Backend は最初に疑う場所ではない
 
-The observed backend was:
+今回観測した backend は次の通りです。
 
 ```text
 module://matplotlib_inline.backend_inline
 ```
 
-This is normal for Jupyter notebooks. The inline backend controls how figures are displayed in the notebook output cell.
+これは Jupyter Notebook では通常の backend です。inline backend は、完成した figure を Notebook の output cell にどう表示するかを担当します。
 
-The backend usually receives text layout after Matplotlib has already resolved fonts. So if Japanese text fails because `Noto Sans JP` is not in `fontManager.ttflist`, changing the backend is unlikely to fix it.
+多くの場合、backend は Matplotlib がフォントを解決した後の表示形式に関係します。つまり、`Noto Sans JP` が `fontManager.ttflist` に存在しないことが原因なら、backend を変えても解決しない可能性が高いです。
 
-Backend matters later for output differences such as:
+backend が重要になるのは、次のような出力差を調べる段階です。
 
-- notebook inline PNG/SVG
-- saved PNG
-- saved PDF/SVG
-- GUI windows
+- Notebook inline PNG/SVG
+- 保存した PNG
+- 保存した PDF/SVG
+- GUI window
 
-But the first question is still:
+最初に確認すべき問いはこれです。
 
 ```python
 import matplotlib.font_manager as fm
 print(fm.findfont("Noto Sans JP", fallback_to_default=False))
 ```
 
-## Diagnostic Checklist
+## 診断チェックリスト
 
-Run these in a notebook.
+Notebook で以下を実行します。
 
-### Kernel Identity
+### Kernel の確認
 
 ```python
 import os
@@ -464,13 +466,13 @@ print(os.getcwd())
 print(os.environ.get("VIRTUAL_ENV"))
 ```
 
-Expected:
+期待する値は次のようなものです。
 
 ```text
 .../practice-mpl-japanize/.venv/bin/python
 ```
 
-### Matplotlib State
+### Matplotlib の状態
 
 ```python
 import matplotlib
@@ -484,7 +486,7 @@ print(plt.rcParams["font.family"])
 print(plt.rcParams["font.sans-serif"][:5])
 ```
 
-### Font Discovery
+### フォント探索
 
 ```python
 import matplotlib.font_manager as fm
@@ -494,7 +496,7 @@ for font in fm.fontManager.ttflist:
         print(font.name, font.fname)
 ```
 
-### Exact Font Resolution
+### 正確なフォント解決
 
 ```python
 import matplotlib.font_manager as fm
@@ -505,58 +507,58 @@ except Exception as exc:
     print(type(exc).__name__, exc)
 ```
 
-## Mental Model
+## メンタルモデル
 
-The clean mental model is:
-
-```text
-uv answers:
-  Which Python and packages are used?
-
-Jupyter answers:
-  Which long-lived Python process is executing notebook cells?
-
-Linux/fontconfig answers:
-  Which font files exist and what family names do they expose?
-
-Matplotlib answers:
-  Which configured family name resolves to which font file?
-
-The backend answers:
-  How is the finished figure displayed or saved?
-```
-
-When Japanese text does not render, ask in this order:
+整理すると、各層の責務は次のようになります。
 
 ```text
-1. Is this the expected kernel?
-2. Has Matplotlib already been imported?
-3. Which matplotlibrc was loaded?
-4. Is the desired font visible in fontManager.ttflist?
-5. What does findfont() resolve?
-6. Is the backend only affecting display/output format?
+uv が答えること:
+  どの Python と package を使っているか。
+
+Jupyter が答えること:
+  どの長寿命 Python プロセスが Notebook cell を実行しているか。
+
+Linux/fontconfig が答えること:
+  どの font file が存在し、それらがどの family name を公開しているか。
+
+Matplotlib が答えること:
+  設定された family name がどの font file に解決されるか。
+
+backend が答えること:
+  完成した figure をどのように表示・保存するか。
 ```
 
-## Conclusion
-
-The goal of "Japanese works without notebook setup" is achievable, but it belongs mostly to the OS/font discovery layer, not to `uv`.
-
-For a stable Linux environment:
+日本語が描画されないときは、この順番で確認します。
 
 ```text
-Install Japanese fonts into a standard OS font location.
-Install fontconfig tools.
-Refresh the font cache.
-Set Matplotlib defaults through matplotlibrc.
-Restart the Jupyter kernel.
+1. 期待した kernel を使っているか。
+2. Matplotlib はすでに import されていないか。
+3. どの matplotlibrc が読み込まれているか。
+4. 目的のフォントが fontManager.ttflist に存在するか。
+5. findfont() はどの font file に解決しているか。
+6. backend は表示・保存形式だけに関係していないか。
 ```
 
-For a portable project demo:
+## 結論
+
+「Notebook で何も設定しなくても日本語が表示される」環境は実現できます。ただし、その責務の多くは `uv` ではなく、OS/font discovery の層にあります。
+
+安定した Linux 環境にするなら、次の流れが基本です。
 
 ```text
-Download a font into the project.
-Use font_manager.addfont() before plotting.
-Set rcParams.
+日本語フォントを標準的な OS font location にインストールする。
+fontconfig tools をインストールする。
+font cache を更新する。
+matplotlibrc で Matplotlib の default font を設定する。
+Jupyter kernel を再起動する。
 ```
 
-The first path gives the desired user experience. The second path gives the best controlled experiment. The gap between them is exactly where Linux, uv, Jupyter, and Matplotlib meet.
+portable な project demo にするなら、次の流れが現実的です。
+
+```text
+フォントを project にダウンロードする。
+font_manager.addfont() で描画前に登録する。
+rcParams を設定する。
+```
+
+前者は理想的な利用体験を作ります。後者は制御された実験として最も分かりやすい方法です。この 2 つの差分にこそ、Linux、uv、Jupyter、Matplotlib の境界があります。
